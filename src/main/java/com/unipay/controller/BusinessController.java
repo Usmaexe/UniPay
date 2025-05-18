@@ -1,6 +1,8 @@
 package com.unipay.controller;
 
 import com.unipay.command.CreateBusinessCommand;
+import com.unipay.dto.BusinessDto;
+import com.unipay.mapper.BusinessMapper;
 import com.unipay.models.Business;
 import com.unipay.models.User;
 import com.unipay.service.authentication.AuthenticationService;
@@ -12,6 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -29,6 +33,8 @@ import static com.unipay.constants.ResourcePaths.V1;
 @RequiredArgsConstructor
 public class BusinessController {
 
+
+    private final BusinessMapper businessMapper;
     private final BusinessService businessService;
     private final AuthenticationService authenticationService;
 
@@ -81,11 +87,11 @@ public class BusinessController {
             @ApiResponse(responseCode = "404", description = "Business for user not found", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content)
     })
-    @GetMapping("/me")
-    public ResponseEntity<Business> getMyBusiness() {
+    @GetMapping()
+    public ResponseEntity<Page<BusinessDto>> getMyBusiness(Pageable pageable) {
         User user = authenticationService.getCurrentUser();
-        Business business = businessService.findForCurrentUser(user);
-        return ResponseEntity.ok(business);
+        Page<Business> business = businessService.findForCurrentUser(pageable, user);
+        return ResponseEntity.ok(business.map(businessMapper::toDto));
     }
 
     /**

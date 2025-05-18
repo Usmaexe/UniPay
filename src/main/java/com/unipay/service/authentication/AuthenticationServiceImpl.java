@@ -31,6 +31,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -178,10 +180,39 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     private UserSession createUserSession(User user, HttpServletRequest request) {
-        UserSession session = userSessionService.createSession(user, request.getHeader("User-Agent"), request.getRemoteAddr());
+        String deviceId = getDeviceName();
+        String userAgent = request.getHeader("User-Agent");
+        String ipAddress = getClientIp(request);
+
+
+        UserSession session = userSessionService.createSession(user, deviceId, userAgent, ipAddress);
         user.getSessions().add(session);
+
         return session;
     }
+
+    private String getDeviceName() {
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            return localHost.getHostName();
+        } catch (UnknownHostException e) {
+            System.err.println("Unable to determine device name.");
+            e.printStackTrace();
+            return "unknown-device";
+        }
+    }
+
+    public static String getClientIp(HttpServletRequest request) {
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            return localHost.getHostAddress();
+        }catch (UnknownHostException e) {
+            System.err.println("Unable to determine IP address.");
+            e.printStackTrace();
+            return "unknown-ipAddress";
+        }
+    }
+
 
     private LoginResponse buildLoginResponse(UserDetailsImpl userDetails, UserSession session) {
         return LoginResponse.success(

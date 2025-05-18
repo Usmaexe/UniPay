@@ -6,13 +6,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 
 @EnableJpaAuditing
 @SpringBootApplication
 @EnableAspectJAutoProxy
 public class UniPayApplication {
 
-    public static void main(String[] args) {
+   public static void main(String[] args) {
         Dotenv dotenv = Dotenv.configure()
                 .ignoreIfMissing()
                 .load();
@@ -23,4 +26,17 @@ public class UniPayApplication {
 
         SpringApplication.run(UniPayApplication.class, args);
     }
+    /* public static void main(String[] args) {
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            String ipAddress = localHost.getHostAddress();
+            String hostName = localHost.getHostName();
+
+            System.out.println("Host Name: " + hostName);
+            System.out.println("IP Address: " + ipAddress);
+        } catch (UnknownHostException e) {
+            System.err.println("Unable to determine IP address.");
+            e.printStackTrace();
+        }
+    }*/
 }

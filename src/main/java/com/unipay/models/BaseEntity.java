@@ -54,10 +54,8 @@ public abstract class BaseEntity {
      * This serves as the primary key for the entity.
      */
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
-    @Column(name = "ID")
-    @EqualsAndHashCode.Include
+    @GeneratedValue(generator = "UUID")
+    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
     protected String id;
 
     /**

@@ -11,6 +11,8 @@ import com.unipay.service.authentication.AuthenticationService;
 import com.unipay.utils.JSONUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -45,8 +47,8 @@ public class BusinessServiceImpl implements BusinessService{
     }
 
     @Override
-    public Business findForCurrentUser(User user) {
-        return businessRepository.findByUser(user).orElseThrow(
+    public Page<Business> findForCurrentUser(Pageable pageable, User user) {
+        return businessRepository.getBusinessesByUser_Id(pageable, user.getId()).orElseThrow(
                 () -> new BusinessException(ExceptionPayloadFactory.BUSINESS_FOR_USER_NOT_FOUND.get())
         );
     }

@@ -1,9 +1,8 @@
-package com.unipay.service.login_history;
+package com.unipay.service.login_histroy;
 
 import com.unipay.models.LoginHistory;
 import com.unipay.models.User;
 import com.unipay.repository.LoginHistoryRepository;
-import com.unipay.service.login_histroy.LoginHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 
 @Slf4j
 @Service

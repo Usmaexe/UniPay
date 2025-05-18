@@ -30,16 +30,17 @@ public class UserSessionServiceImpl implements UserSessionService {
      */
     @Override
     @Transactional
-    public UserSession createSession(User user, String userAgent, String ipAddress) {
-        UserSession session = buildUserSession(user, userAgent, ipAddress);
+    public UserSession createSession(User user,String deviceId,  String userAgent, String ipAddress) {
+        UserSession session = buildUserSession(user, deviceId, userAgent, ipAddress);
         UserSession savedSession = sessionRepository.save(session);
         log.info("Created session [{}] for user [{}]", savedSession.getId(), user.getId());
         return savedSession;
     }
 
-    private UserSession buildUserSession(User user, String userAgent, String ipAddress) {
+    private UserSession buildUserSession(User user, String deviceId, String userAgent, String ipAddress) {
         return UserSession.builder()
                 .user(user)
+                .deviceId(deviceId)
                 .userAgent(userAgent)
                 .ipAddress(ipAddress)
                 .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))

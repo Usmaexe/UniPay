@@ -32,7 +32,7 @@ public interface UserSessionService {
      * @param ipAddress The IP address of the client.
      * @return A new {@link UserSession} instance representing the created session.
      */
-    UserSession createSession(User user, String userAgent, String ipAddress);
+    UserSession createSession(User user, String deviceId,  String userAgent, String ipAddress);
     void revokeAllSessions(User user);
     void revokeSession(String sessionId);
 }

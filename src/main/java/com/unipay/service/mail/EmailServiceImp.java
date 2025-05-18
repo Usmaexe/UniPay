@@ -9,6 +9,8 @@ import com.unipay.models.User;
 import com.unipay.repository.ConfirmationTokenRepository;
 import com.unipay.repository.UserRepository;
 import com.unipay.response.EmailConfirmationResponse;
+import com.unipay.response.EmailConfirmationResponseFailed;
+import com.unipay.response.EmailConfirmationResponseSuccess;
 import com.unipay.utils.EmailContentBuilder;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -64,8 +66,7 @@ public class EmailServiceImp implements EmailService{
         ConfirmationToken token = getTokenByCode(confirmationCode);
 
         if (token == null || token.isExpired()) {
-            return new EmailConfirmationResponse(
-                    "ERROR",
+            return new EmailConfirmationResponseFailed(
                     "INVALID_TOKEN",
                     "Verification token is invalid or expired"
             );
@@ -78,11 +79,13 @@ public class EmailServiceImp implements EmailService{
         userRepository.save(user);
 
         log.info("Email {} verified and status set to ACTIVE.", user.getEmail());
-        return new EmailConfirmationResponse(
-                "SUCCESS",
+
+        return new EmailConfirmationResponseSuccess(
+                "CONFIRMED",
                 "Email verified successfully"
         );
     }
+
 
     private ConfirmationToken getTokenByCode(String code) {
         ConfirmationToken token = confirmationTokenRepository.findByConfirmationToken(code)

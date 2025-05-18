@@ -8,6 +8,7 @@ import com.unipay.enums.UserStatus;
 import com.unipay.exception.BusinessException;
 import com.unipay.exception.ExceptionPayloadFactory;
 import com.unipay.helper.UserRegistrationHelper;
+import com.unipay.models.Business;
 import com.unipay.models.ConfirmationToken;
 import com.unipay.models.MFASettings;
 import com.unipay.models.User;
@@ -77,7 +78,6 @@ public class UserServiceImpl implements UserService {
         User user = buildUser(command);
         assignUserRole(user);
         registrationHelper.associateUserProfileAndSettings(user, command);
-        registrationHelper.logLoginHistory(user, request);
         registrationHelper.auditLogCreate(user, AuditLogAction.USER_CREATED.getAction(), "User created");
 
         sendConfirmation(user);
