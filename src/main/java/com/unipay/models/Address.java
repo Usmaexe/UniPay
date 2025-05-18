@@ -76,7 +76,8 @@ public class Address extends BaseEntity {
 
         return address;
     }
-    public void linkToProfile(UserProfile userProfile) {
-        this.userProfile = userProfile;
+    public void linkToProfile(UserProfile profile) {
+        this.userProfile = profile;
+        profile.getAddresses().add(this);
     }
 }

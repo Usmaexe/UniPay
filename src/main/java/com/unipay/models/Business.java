@@ -1,10 +1,7 @@
 package com.unipay.models;
 
 import com.unipay.command.CreateBusinessCommand;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -27,7 +24,7 @@ public class Business extends BaseEntity{
     @Column(name = "VERIFIED")
     private boolean verified;
 
-    @OneToOne
+    @ManyToOne
     private User user;
 
     public static Business create(final CreateBusinessCommand command){

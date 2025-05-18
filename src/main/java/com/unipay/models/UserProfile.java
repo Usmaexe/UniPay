@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -86,7 +87,7 @@ public class UserProfile extends BaseEntity {
      * This is a one-to-many relationship with the {@link Address} entity.
      */
     @OneToMany(mappedBy = "userProfile", cascade = CascadeType.ALL)
-    private Set<Address> addresses;
+    private Set<Address> addresses = new HashSet<>();
 
     /**
      * A set of payment methods associated with the user's profile.
@@ -94,7 +95,7 @@ public class UserProfile extends BaseEntity {
      * This is a one-to-many relationship with the {@link PaymentMethod} entity.
      */
     @OneToMany(mappedBy = "userProfile", cascade = CascadeType.ALL)
-    private Set<PaymentMethod> paymentMethods;
+    private Set<PaymentMethod> paymentMethods = new HashSet<>();
 
     /**
      * Creates a new {@link UserProfile} instance from the provided {@link ProfileCommand}.
@@ -117,6 +118,7 @@ public class UserProfile extends BaseEntity {
         final Address address = Address.create(command);
 
         address.linkToProfile(this);
+        this.addresses.add(address);
         return address;
     }
     public static Set<Address> createAddress(final Set<CreateAddressCommand> addressCommands){

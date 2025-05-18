@@ -1,5 +1,6 @@
 package com.unipay.dto;
 
+import com.unipay.models.Business;
 import lombok.Data;
 
 import java.util.Set;
@@ -87,4 +88,5 @@ public class CurrentUser extends BaseEntityDto {
      * Webhooks allow real-time push notifications to external systems when events occur (e.g., payment received).
      */
     private Set<WebhookDto> webhooks;
+    private Set<BusinessDto> businesses;
 }
