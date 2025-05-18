@@ -1,20 +1,14 @@
 package com.unipay.response;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
-
-public class EmailConfirmationResponse {
-    private String success;
-    private String code;
-    private String message;
-
-    public EmailConfirmationResponse(String success, String message) {
-        this.success = success;
-        this.message = message;
-    }
-
-    public EmailConfirmationResponse(String success, String code, String message) {
-        this.success = success;
-        this.code = code;
-        this.message = message;
-    }
+@Getter
+@Setter
+@AllArgsConstructor
+public abstract class EmailConfirmationResponse {
+    protected String status;
+    protected String code;
+    protected String message;
 }

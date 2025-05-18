@@ -18,17 +18,18 @@ public class UserSessionDto {
     /**
      * Unique identifier for the session.
      */
-    private String sessionId;
+    private String id;
 
     /**
      * Information about the device used to start the session (e.g., web browser, mobile app).
      */
-    private String deviceInfo;
+    private String deviceId;
 
     /**
      * IP address of the user's device when the session was created.
      */
     private String ipAddress;
+    private String userAgent;
 
     /**
      * The expiration timestamp of the session.

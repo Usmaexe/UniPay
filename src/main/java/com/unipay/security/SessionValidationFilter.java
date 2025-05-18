@@ -56,6 +56,17 @@ public class SessionValidationFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        return path.startsWith("/v1/auth/confirm") ||
+                path.startsWith("/v1/auth/login") ||
+                path.startsWith("/v1/auth/register") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs");
+    }
+
     private void handleSecurityException(
             HttpServletRequest request,
             HttpServletResponse response,

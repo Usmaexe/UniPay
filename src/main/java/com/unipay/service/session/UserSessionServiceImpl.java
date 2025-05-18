@@ -11,17 +11,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 /**
- * Implementation of {@link UserSessionService} that provides
- * the logic for managing user sessions including creation, validation,
- * and revocation of sessions.
+ * Service implementation for managing user sessions including creation, validation,
+ * invalidation, and revocation logic.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserSessionServiceImpl implements UserSessionService {
-
 
     private final JwtService jwtService;
     private final UserSessionRepository sessionRepository;
@@ -31,25 +30,33 @@ public class UserSessionServiceImpl implements UserSessionService {
      */
     @Override
     @Transactional
-    public UserSession createSession(User user, String userAgent, String ipAddress) {
-        UserSession session = new UserSession();
-        session.setUser(user);
-        session.setUserAgent(userAgent);
-        session.setIpAddress(ipAddress);
-        session.setExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
-        return sessionRepository.save(session);
+    public UserSession createSession(User user,String deviceId,  String userAgent, String ipAddress) {
+        UserSession session = buildUserSession(user, deviceId, userAgent, ipAddress);
+        UserSession savedSession = sessionRepository.save(session);
+        log.info("Created session [{}] for user [{}]", savedSession.getId(), user.getId());
+        return savedSession;
+    }
+
+    private UserSession buildUserSession(User user, String deviceId, String userAgent, String ipAddress) {
+        return UserSession.builder()
+                .user(user)
+                .deviceId(deviceId)
+                .userAgent(userAgent)
+                .ipAddress(ipAddress)
+                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .revoked(false)
+                .build();
     }
 
     /**
-     * Revokes the session identified by the provided session ID by deleting it from the repository.
-     *
-     * @param sessionId The ID of the session to revoke.
+     * {@inheritDoc}
      */
+    @Override
     @Transactional
     public void revokeSession(String sessionId) {
         sessionRepository.deleteById(sessionId);
+        log.info("Revoked session [{}]", sessionId);
     }
-
 
     /**
      * {@inheritDoc}
@@ -58,10 +65,7 @@ public class UserSessionServiceImpl implements UserSessionService {
     @Transactional(readOnly = true)
     public boolean isSessionValid(String sessionId) {
         return sessionRepository.findById(sessionId)
-                .map(session ->
-                        !session.isRevoked() &&
-                                session.getExpiresAt().isAfter(Instant.now())
-                )
+                .map(session -> !session.isRevoked() && session.getExpiresAt().isAfter(Instant.now()))
                 .orElse(false);
     }
 
@@ -75,20 +79,25 @@ public class UserSessionServiceImpl implements UserSessionService {
             session.setRevoked(true);
             sessionRepository.save(session);
             jwtService.blacklistToken(sessionId);
+            log.info("Invalidated session [{}] and blacklisted token", sessionId);
         });
     }
+
     /**
-     * Revokes all active sessions for the given user by removing them from the repository.
-     *
-     * @param user The user whose sessions are to be revoked.
+     * {@inheritDoc}
      */
     @Override
     @Transactional
     public void revokeAllSessions(User user) {
-        sessionRepository.findByUser(user).forEach(session -> {
+        List<UserSession> sessions = sessionRepository.findByUser(user);
+
+        for (UserSession session : sessions) {
             session.setRevoked(true);
             sessionRepository.save(session);
             jwtService.blacklistToken(session.getId());
-        });
+            log.debug("Revoked session [{}] for user [{}]", session.getId(), user.getId());
+        }
+
+        log.info("Revoked all sessions for user [{}]", user.getId());
     }
 }

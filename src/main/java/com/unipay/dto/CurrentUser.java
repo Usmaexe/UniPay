@@ -1,6 +1,8 @@
 package com.unipay.dto;
 
+import com.unipay.models.AuditLog;
 import com.unipay.models.Business;
+import com.unipay.models.LoginHistory;
 import lombok.Data;
 
 import java.util.Set;
@@ -32,6 +34,8 @@ public class CurrentUser extends BaseEntityDto {
      * - Address or other user-identifiable metadata
      */
     private UserProfileDto profile;
+    private Set<AuditLogDto> auditLogs;
+    private Set<LoginHistoryDto> loginHistories;
 
     /**
      * Stores the user's customizable settings including:

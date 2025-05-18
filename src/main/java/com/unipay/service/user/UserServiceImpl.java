@@ -8,6 +8,7 @@ import com.unipay.enums.UserStatus;
 import com.unipay.exception.BusinessException;
 import com.unipay.exception.ExceptionPayloadFactory;
 import com.unipay.helper.UserRegistrationHelper;
+import com.unipay.models.Business;
 import com.unipay.models.ConfirmationToken;
 import com.unipay.models.MFASettings;
 import com.unipay.models.User;
@@ -71,25 +72,38 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public User create(UserRegisterCommand command, HttpServletRequest request) {
-        log.debug("Creating user: {}", command.getUsername());
-        checkIfUserExists(command);
+        log.debug("Registering user: {}", command.getUsername());
+        validateUserDoesNotExist(command);
 
-        User user = createUserEntity(command);
-        initializeMfaSettings(user);
-        roleService.assignRoleToUser(user, RoleName.USER);
-
+        User user = buildUser(command);
+        assignUserRole(user);
         registrationHelper.associateUserProfileAndSettings(user, command);
-        registrationHelper.logLoginHistory(user, request);
-        registrationHelper.auditLogCreate(
-                user,
-                AuditLogAction.USER_CREATED.getAction(),
-                "User created: " + command.getUsername()
-        );
+        registrationHelper.auditLogCreate(user, AuditLogAction.USER_CREATED.getAction(), "User created");
 
-        emailService.sendConfirmationEmail(user);
+        sendConfirmation(user);
         user.setStatus(UserStatus.PENDING);
-
         return user;
+    }
+
+    private void validateUserDoesNotExist(UserRegisterCommand command) {
+        if (userRepository.existsByEmailOrUsername(command.getEmail(), command.getUsername())) {
+            throw new BusinessException(ExceptionPayloadFactory.USER_ALREADY_EXIST.get());
+        }
+    }
+
+    private User buildUser(UserRegisterCommand command) {
+        User user = User.create(command);
+        user.setPasswordHash(passwordEncoder.encode(command.getPassword()));
+        initializeMfaSettings(user);
+        return userRepository.saveAndFlush(user);
+    }
+
+    private void assignUserRole(User user) {
+        roleService.assignRoleToUser(user, RoleName.USER);
+    }
+
+    private void sendConfirmation(User user) {
+        emailService.sendConfirmationEmail(user);
     }
 
     /**
@@ -102,18 +116,6 @@ public class UserServiceImpl implements UserService {
         mfaSettings.setEnabled(false);
         mfaSettings.setUser(user);
         user.setMfaSettings(mfaSettings);
-    }
-
-    /**
-     * Encodes the password and creates the user entity in the database.
-     *
-     * @param command The command containing user credentials.
-     * @return The persisted user entity.
-     */
-    private User createUserEntity(UserRegisterCommand command) {
-        User user = User.create(command);
-        user.setPasswordHash(passwordEncoder.encode(command.getPassword()));
-        return userRepository.saveAndFlush(user);
     }
 
     /**

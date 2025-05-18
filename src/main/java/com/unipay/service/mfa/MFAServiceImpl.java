@@ -35,11 +35,6 @@ import java.util.stream.Collectors;
 
 import static com.unipay.constants.Constants.*;
 
-
-
-/**
- * Service implementation for managing Multi-Factor Authentication (MFA) for users.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,38 +42,25 @@ public class MFAServiceImpl implements MFAService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+
     private final SecretGenerator secretGenerator = new DefaultSecretGenerator();
     private final TimeProvider timeProvider = new SystemTimeProvider();
     private final CodeGenerator codeGenerator = new DefaultCodeGenerator();
     private final CodeVerifier verifier = new DefaultCodeVerifier(codeGenerator, timeProvider);
     private final SecureRandom secureRandom = new SecureRandom();
 
-
-    /**
-     * Enables MFA for the given user after verifying the provided TOTP code.
-     *
-     * @param user The user to enable MFA for.
-     * @param code The TOTP code to validate before enabling MFA.
-     * @throws BusinessException if MFA is not set up or the code is invalid.
-     */
     @Override
     @Transactional
     public void enableMfa(User user, String code) {
-        if (user.getMfaSettings() == null) {
-            throw new BusinessException(ExceptionPayloadFactory.MFA_NOT_SET_UP.get());
-        }
-        if (!validateCode(user, code)) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_MFA_CODE.get());
+        if (user.getMfaSettings() == null || !validateCode(user, code)) {
+            throw new BusinessException(user.getMfaSettings() == null ?
+                    ExceptionPayloadFactory.MFA_NOT_SET_UP.get() :
+                    ExceptionPayloadFactory.INVALID_MFA_CODE.get());
         }
         user.getMfaSettings().setEnabled(true);
         userRepository.save(user);
     }
 
-    /**
-     * Disables MFA for the given user by clearing their MFA settings.
-     *
-     * @param user The user to disable MFA for.
-     */
     @Override
     @Transactional
     public void disableMfa(User user) {
@@ -86,13 +68,6 @@ public class MFAServiceImpl implements MFAService {
         userRepository.save(user);
     }
 
-    /**
-     * Generates a QR code image to be scanned by an authenticator app.
-     *
-     * @param user The user for whom the QR code is generated.
-     * @return A BufferedImage containing the QR code.
-     * @throws QrGenerationException If the QR code generation fails.
-     */
     @Override
     public BufferedImage generateQrCodeImage(User user) throws QrGenerationException {
         String secret = getOrGenerateSecret(user);
@@ -113,13 +88,6 @@ public class MFAServiceImpl implements MFAService {
         }
     }
 
-    /**
-     * Converts a BufferedImage (e.g., QR code) to a byte array in PNG format.
-     *
-     * @param image The image to convert.
-     * @return A byte array representing the PNG image.
-     * @throws IOException If an error occurs during image writing.
-     */
     @Override
     public byte[] getImageData(BufferedImage image) throws IOException {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -128,19 +96,10 @@ public class MFAServiceImpl implements MFAService {
         }
     }
 
-    /**
-     * Generates a list of new MFA recovery codes for the user.
-     * These are hashed and stored securely.
-     *
-     * @param user The user to generate codes for.
-     * @return A list of plaintext recovery codes.
-     * @throws BusinessException If MFA is not enabled.
-     */
     @Override
     @Transactional
     public List<String> generateRecoveryCodes(User user) {
         ensureMfaEnabled(user);
-
         List<String> codes = secureRandom.ints(RECOVERY_CODE_COUNT, 100000, 999999)
                 .mapToObj(i -> String.format("%0" + RECOVERY_CODE_LENGTH + "d", i))
                 .collect(Collectors.toList());
@@ -151,16 +110,10 @@ public class MFAServiceImpl implements MFAService {
 
         user.getMfaSettings().setRecoveryCodes(hashedCodes);
         userRepository.save(user);
+
         return codes;
     }
 
-    /**
-     * Returns the number of remaining (unused) recovery codes for the user.
-     *
-     * @param user The user to query.
-     * @return Number of remaining recovery codes.
-     * @throws BusinessException If MFA is not enabled.
-     */
     @Override
     @Transactional(readOnly = true)
     public int getRemainingRecoveryCodes(User user) {
@@ -168,14 +121,6 @@ public class MFAServiceImpl implements MFAService {
         return user.getMfaSettings().getRecoveryCodes().size();
     }
 
-    /**
-     * Validates a TOTP code provided by the user.
-     *
-     * @param user The user for whom the code is validated.
-     * @param code The code to validate.
-     * @return True if valid, false otherwise.
-     * @throws BusinessException If MFA is not enabled.
-     */
     @Override
     @Transactional
     public boolean validateCode(User user, String code) {
@@ -183,14 +128,6 @@ public class MFAServiceImpl implements MFAService {
         return verifier.isValidCode(user.getMfaSettings().getSecret(), code);
     }
 
-    /**
-     * Validates and consumes a recovery code.
-     * If matched, the code is removed from storage.
-     *
-     * @param user The user using the recovery code.
-     * @param code The code provided by the user.
-     * @return True if valid and consumed, false otherwise.
-     */
     @Override
     @Transactional
     public boolean validateRecoveryCode(User user, String code) {
@@ -208,12 +145,6 @@ public class MFAServiceImpl implements MFAService {
         return false;
     }
 
-    /**
-     * Retrieves the existing MFA secret or generates a new one if missing.
-     *
-     * @param user The user to fetch or generate the secret for.
-     * @return The MFA secret.
-     */
     private String getOrGenerateSecret(User user) {
         MFASettings settings = user.getMfaSettings();
         if (settings == null || settings.getSecret() == null) {
@@ -225,12 +156,6 @@ public class MFAServiceImpl implements MFAService {
         return settings.getSecret();
     }
 
-    /**
-     * Ensures that the user has MFA enabled, otherwise throws an exception.
-     *
-     * @param user The user to check.
-     * @throws BusinessException If MFA is not enabled.
-     */
     private void ensureMfaEnabled(User user) {
         MFASettings settings = user.getMfaSettings();
         if (settings == null || !settings.isEnabled()) {
@@ -238,12 +163,6 @@ public class MFAServiceImpl implements MFAService {
         }
     }
 
-    /**
-     * Hashes a recovery code using Base32 encoding.
-     *
-     * @param code The code to hash.
-     * @return The Base32-encoded string.
-     */
     private String hashCode(String code) {
         Base32 base32 = new Base32();
         return base32.encodeToString(code.getBytes(StandardCharsets.UTF_8));

@@ -8,6 +8,7 @@ import com.unipay.dto.CurrentUser;
 import com.unipay.mapper.UserMapper;
 import com.unipay.models.User;
 import com.unipay.response.EmailConfirmationResponse;
+import com.unipay.response.EmailConfirmationResponseFailed;
 import com.unipay.response.LoginResponse;
 import com.unipay.response.UserRegistrationResponse;
 import com.unipay.service.authentication.AuthenticationService;

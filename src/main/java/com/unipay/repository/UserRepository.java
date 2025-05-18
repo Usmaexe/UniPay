@@ -73,13 +73,13 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
      * @param email the email
      * @return Optional containing the user if found
      */
-    @Query("""
-           SELECT u FROM User u
-           JOIN FETCH u.userRoles ur
-           JOIN FETCH ur.role r
-           LEFT JOIN FETCH r.permissions
-           WHERE u.email = :email
-           """)
+    @Query("SELECT u FROM User u " +
+            "LEFT JOIN FETCH u.sessions " +
+            "LEFT JOIN FETCH u.userRoles ur " +
+            "LEFT JOIN FETCH ur.role r " +
+            "LEFT JOIN FETCH r.permissions " +
+            "LEFT JOIN FETCH u.mfaSettings " +
+            "WHERE u.email = :email")
     Optional<User> findByEmailWithRolesAndPermissions(@Param("email") String email);
 
     /**
