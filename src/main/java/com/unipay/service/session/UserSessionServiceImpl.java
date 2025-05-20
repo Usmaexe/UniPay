@@ -6,12 +6,14 @@ import com.unipay.repository.UserSessionRepository;
 import com.unipay.utils.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
+import java.util.Optional;
+
 
 /**
  * Service implementation for managing user sessions including creation, validation,
@@ -25,16 +27,32 @@ public class UserSessionServiceImpl implements UserSessionService {
     private final JwtService jwtService;
     private final UserSessionRepository sessionRepository;
 
+    @Value("${session.expiration.days:7}")
+    private int sessionExpirationDays;
+
     /**
      * {@inheritDoc}
      */
     @Override
     @Transactional
-    public UserSession createSession(User user,String deviceId,  String userAgent, String ipAddress) {
+    public UserSession createSession(User user, String deviceId, String userAgent, String ipAddress) {
+        Instant now = Instant.now();
+        Optional<UserSession> existing = sessionRepository
+                .findFirstByUserIdAndDeviceIdAndRevokedFalseAndExpiresAtAfter(
+                        user.getId(), deviceId, now);
+
+        if (existing.isPresent()) {
+            UserSession session = existing.get();
+            session.setExpiresAt(now.plus(sessionExpirationDays, ChronoUnit.DAYS));
+            UserSession updated = sessionRepository.save(session);
+            log.info("Extended session [{}] for user [{}]", updated.getId(), user.getId());
+            return updated;
+        }
+
         UserSession session = buildUserSession(user, deviceId, userAgent, ipAddress);
-        UserSession savedSession = sessionRepository.save(session);
-        log.info("Created session [{}] for user [{}]", savedSession.getId(), user.getId());
-        return savedSession;
+        UserSession saved = sessionRepository.save(session);
+        log.info("Created new session [{}] for user [{}]", saved.getId(), user.getId());
+        return saved;
     }
 
     private UserSession buildUserSession(User user, String deviceId, String userAgent, String ipAddress) {
@@ -43,7 +61,7 @@ public class UserSessionServiceImpl implements UserSessionService {
                 .deviceId(deviceId)
                 .userAgent(userAgent)
                 .ipAddress(ipAddress)
-                .expiresAt(Instant.now().plus(7, ChronoUnit.DAYS))
+                .expiresAt(Instant.now().plus(sessionExpirationDays, ChronoUnit.DAYS))
                 .revoked(false)
                 .build();
     }
@@ -54,8 +72,11 @@ public class UserSessionServiceImpl implements UserSessionService {
     @Override
     @Transactional
     public void revokeSession(String sessionId) {
-        sessionRepository.deleteById(sessionId);
-        log.info("Revoked session [{}]", sessionId);
+        sessionRepository.findById(sessionId).ifPresent(session -> {
+            session.setRevoked(true);
+            jwtService.blacklistToken(sessionId);
+            log.info("Revoked session [{}]", sessionId);
+        });
     }
 
     /**
@@ -64,9 +85,7 @@ public class UserSessionServiceImpl implements UserSessionService {
     @Override
     @Transactional(readOnly = true)
     public boolean isSessionValid(String sessionId) {
-        return sessionRepository.findById(sessionId)
-                .map(session -> !session.isRevoked() && session.getExpiresAt().isAfter(Instant.now()))
-                .orElse(false);
+        return sessionRepository.isValidSession(sessionId, Instant.now());
     }
 
     /**
@@ -89,15 +108,8 @@ public class UserSessionServiceImpl implements UserSessionService {
     @Override
     @Transactional
     public void revokeAllSessions(User user) {
-        List<UserSession> sessions = sessionRepository.findByUser(user);
-
-        for (UserSession session : sessions) {
-            session.setRevoked(true);
-            sessionRepository.save(session);
-            jwtService.blacklistToken(session.getId());
-            log.debug("Revoked session [{}] for user [{}]", session.getId(), user.getId());
-        }
-
-        log.info("Revoked all sessions for user [{}]", user.getId());
+        int revokedCount = sessionRepository.bulkRevokeUserSessions(user.getId(), Instant.now());
+        jwtService.bulkBlacklistTokens(user.getId());
+        log.info("Revoked {} sessions for user [{}]", revokedCount, user.getId());
     }
 }

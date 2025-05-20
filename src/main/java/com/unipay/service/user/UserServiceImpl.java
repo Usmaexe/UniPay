@@ -8,7 +8,6 @@ import com.unipay.enums.UserStatus;
 import com.unipay.exception.BusinessException;
 import com.unipay.exception.ExceptionPayloadFactory;
 import com.unipay.helper.UserRegistrationHelper;
-import com.unipay.models.Business;
 import com.unipay.models.ConfirmationToken;
 import com.unipay.models.MFASettings;
 import com.unipay.models.User;
@@ -85,6 +84,12 @@ public class UserServiceImpl implements UserService {
         return user;
     }
 
+    /**
+     * Validates if a user already exists with the same email or username.
+     * Throws a {@link BusinessException} if a conflict is found.
+     *
+     * @param command The registration input.
+     */
     private void validateUserDoesNotExist(UserRegisterCommand command) {
         if (userRepository.existsByEmailOrUsername(command.getEmail(), command.getUsername())) {
             throw new BusinessException(ExceptionPayloadFactory.USER_ALREADY_EXIST.get());
@@ -116,19 +121,6 @@ public class UserServiceImpl implements UserService {
         mfaSettings.setEnabled(false);
         mfaSettings.setUser(user);
         user.setMfaSettings(mfaSettings);
-    }
-
-    /**
-     * Validates if a user already exists with the same email or username.
-     * Throws a {@link BusinessException} if a conflict is found.
-     *
-     * @param command The registration input.
-     */
-    private void checkIfUserExists(UserRegisterCommand command) {
-        if (userRepository.existsByEmailOrUsername(command.getEmail(), command.getUsername())) {
-            log.warn("User with email {} or username {} already exists", command.getEmail(), command.getUsername());
-            throw new BusinessException(ExceptionPayloadFactory.USER_ALREADY_EXIST.get());
-        }
     }
 
     /**
@@ -245,7 +237,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void deactivateUser(String userId) {
+    public void desactivateUser(String userId) {
         User user = getUserById(userId);
         user.setStatus(UserStatus.INACTIVE);
         userSessionService.revokeAllSessions(user);

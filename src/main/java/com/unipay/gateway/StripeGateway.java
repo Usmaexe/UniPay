@@ -1,10 +1,8 @@
 package com.unipay.gateway;
 
-import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
 import com.unipay.service.payment.request.PaymentRequest;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;

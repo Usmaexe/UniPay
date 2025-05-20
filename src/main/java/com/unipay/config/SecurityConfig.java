@@ -16,8 +16,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.servlet.util.matcher.MvcRequestMatcher;
-import org.springframework.web.servlet.handler.HandlerMappingIntrospector;
 
 
 
@@ -32,48 +30,41 @@ public class SecurityConfig {
 
     private final PasswordEncoder passwordEncoder;
     private final UserDetailsServiceImpl userDetailsService;
-    private final SessionValidationFilter sessionValidationFilter;
-    private final UserIdAuthorizationManager userIdAuthorizationManager;
-    private final HandlerMappingIntrospector introspector;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        MvcRequestMatcher.Builder mvc = new MvcRequestMatcher.Builder(introspector);
-
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Permit only the confirm email endpoint
-                        .requestMatchers(mvc.pattern("/v1/auth/confirm")).permitAll()
-
-                        // Permit other public endpoints like login/register
-                        .requestMatchers(mvc.pattern("/v1/auth/login")).permitAll()
-                        .requestMatchers(mvc.pattern("/v1/auth/register")).permitAll()
-                        .requestMatchers(mvc.pattern("/v1/users/**")).permitAll()
-                        .requestMatchers(mvc.pattern("/v1/businesses/**")).permitAll()
-
-                        // Permit swagger
-                        .requestMatchers(mvc.pattern("/swagger-ui/**"), mvc.pattern("/v3/api-docs/**")).permitAll()
-
-                        // Protect MFA routes
-                        .requestMatchers(mvc.pattern("/v1/users/{userId}/mfa/**")).access(userIdAuthorizationManager)
-
-                        // Everything else requires auth
+                        .requestMatchers(
+                                "/v1/auth/confirm",
+                                "/v1/auth/login",
+                                "/v1/auth/register",
+                                "/v1/auth/current",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
+                        .requestMatchers("/v1/users/**").hasRole("USER")
+                        .requestMatchers("/v1/businesses/**").hasRole("BUSINESS")
+                        .requestMatchers("/v1/admin/**").hasRole("ADMIN")
+                        // MFA endpoints now protected by USER role
+                        .requestMatchers("/v1/users/{userId}/mfa/**").hasRole("USER")
                         .anyRequest().authenticated()
                 )
-
-                .addFilterBefore(sessionValidationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(customAccessDeniedHandler)
                 )
                 .build();
     }
+
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {
         return web -> web.ignoring().requestMatchers(
@@ -83,10 +74,12 @@ public class SecurityConfig {
                 "/webjars/**"
         );
     }
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
+
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();

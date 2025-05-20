@@ -22,7 +22,10 @@ import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.*;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
@@ -62,14 +65,13 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             Authentication authentication = authenticateUser(command);
             User user = getAuthenticatedUser(authentication);
-
             validateUserIsActive(user);
 
             if (isMfaEnabled(user)) {
                 String challengeToken = generateMfaChallengeToken(authentication);
                 return LoginResponse.mfaRequired(challengeToken);
             }
-
+            userSessionService.revokeAllSessions(user);
             UserSession session = createUserSession(user, request);
             logLoginSuccess(user, request);
             return buildLoginResponse(authentication, session);
@@ -134,11 +136,16 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return userService.findByEmailWithRolesAndPermissions(authentication.getName());
+        String email = authentication == null ? null : authentication.getName();
+        if (email == null) {
+            throw new BusinessException(ExceptionPayloadFactory.USER_NOT_AUTHENTICATED.get());
+        }
+        return userService.findByEmail(email);
     }
+
 
     @Override
     @Transactional
@@ -184,12 +191,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         String userAgent = request.getHeader("User-Agent");
         String ipAddress = getClientIp(request);
 
-
-        UserSession session = userSessionService.createSession(user, deviceId, userAgent, ipAddress);
-        user.getSessions().add(session);
-
-        return session;
+        return userSessionService.createSession(user, deviceId, userAgent, ipAddress);
     }
+
 
     private String getDeviceName() {
         try {

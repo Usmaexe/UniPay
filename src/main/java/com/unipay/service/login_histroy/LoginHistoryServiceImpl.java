@@ -11,7 +11,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,7 +29,7 @@ public class LoginHistoryServiceImpl implements LoginHistoryService {
         loginHistory.setUserAgent(userAgent);
         loginHistory.setSuccessful(successful);
 
-        user.addLoginHistory(loginHistory);
+
 
         loginHistoryRepository.save(loginHistory);
 

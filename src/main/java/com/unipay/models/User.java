@@ -166,7 +166,6 @@ public class User extends BaseEntity {
      * @param loginHistory The {@link LoginHistory} object to be linked with the user.
      */
     public void addLoginHistory(LoginHistory loginHistory) {
-        // Initialize the set if it's null
         if (this.loginHistories == null) {
             this.loginHistories = new HashSet<>();
         }

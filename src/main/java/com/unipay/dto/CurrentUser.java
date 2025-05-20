@@ -1,8 +1,5 @@
 package com.unipay.dto;
 
-import com.unipay.models.AuditLog;
-import com.unipay.models.Business;
-import com.unipay.models.LoginHistory;
 import lombok.Data;
 
 import java.util.Set;
