@@ -9,6 +9,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+
+@Slf4j
 @Service
 public class JwtService {
 
@@ -31,6 +34,11 @@ public class JwtService {
     private final Cache<String, Boolean> tokenBlacklist =
             CacheBuilder.newBuilder()
                     .expireAfterWrite(5, TimeUnit.MINUTES)
+                    .build();
+
+    private final Cache<String, Boolean> userRevocationCache =
+            CacheBuilder.newBuilder()
+                    .expireAfterWrite(30, TimeUnit.DAYS)
                     .build();
 
     @Value("${jwt.secret}")
@@ -45,17 +53,40 @@ public class JwtService {
     @Value("${jwt.mfa-challenge-expiration}")
     private long mfaChallengeExpiration;
 
+
+    public void bulkBlacklistTokens(String userId) {
+        userRevocationCache.put(userId, true);
+        log.info("Bulk blacklisted tokens for user: {}", userId);
+    }
+
+    // Update validation logic
+    public boolean validateToken(String token) {
+        if (isTokenBlacklisted(token)) {
+            return false;
+        }
+
+        final String username = extractUsername(token);
+        return Boolean.FALSE.equals(userRevocationCache.getIfPresent(username));
+    }
+
+    // Update existing blacklist methods
     public void blacklistToken(String token) {
         tokenBlacklist.put(token, true);
+        final String username = extractUsername(token);
+        userRevocationCache.put(username, true);
+    }
+
+    // Add helper method
+    private String getUserIdFromToken(String token) {
+        try {
+            return extractUsername(token);
+        } catch (JwtException e) {
+            return "invalid";
+        }
     }
 
     public boolean isTokenBlacklisted(String token) {
         return tokenBlacklist.getIfPresent(token) != null;
-    }
-
-    // Add this to token validation logic
-    public boolean validateToken(String token) {
-        return !isTokenBlacklisted(token);
     }
 
     public JwtTokenPair generateTokenPair(UserDetailsImpl userDetails, String sessionId) {
@@ -143,7 +174,7 @@ public class JwtService {
         return extractClaim(token, Claims::getSubject);
     }
 
-    private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) throws JwtException {
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) throws JwtException {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }

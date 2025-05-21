@@ -89,5 +89,5 @@ public interface UserService {
     User findByEmail(String email);
     Optional<User> findByEmailWithOptional(String email);
     void changePassword(User user, String newPassword);
-    void deactivateUser(String userId);
+    void desactivateUser(String userId);
 }

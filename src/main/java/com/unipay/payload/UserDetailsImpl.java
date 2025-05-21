@@ -2,6 +2,7 @@ package com.unipay.payload;
 
 
 import com.unipay.enums.UserStatus;
+import com.unipay.models.Permission;
 import com.unipay.models.Role;
 import com.unipay.models.User;
 import lombok.Getter;
@@ -16,6 +17,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 @Getter
@@ -28,18 +30,18 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        Set<GrantedAuthority> authorities = new HashSet<>();
+        var roleAuthorities = user.getUserRoles().stream()
+                .map(ur -> new SimpleGrantedAuthority("ROLE_" + ur.getRole().getName().name()))
+                .collect(Collectors.toSet());
+        var permAuthorities = user.getUserRoles().stream()
+                .flatMap(ur -> ur.getRole().getPermissions().stream())
+                .map(Permission::getName)
+                .map(Enum::name)
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toSet());
 
-        user.getUserRoles().forEach(userRole -> {
-            Role role = userRole.getRole();
-            authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getName()));
-
-            role.getPermissions().forEach(permission ->
-                    authorities.add(new SimpleGrantedAuthority(permission.getName().name()))
-            );
-        });
-
-        return authorities;
+        roleAuthorities.addAll(permAuthorities);
+        return roleAuthorities;
     }
 
     @Override
