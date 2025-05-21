@@ -27,7 +27,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create-drop  # ⚠️ Change to 'update' or 'none' in production
+      ddl-auto: update  # ⚠️ Change to 'update' or 'none' in production
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -60,3 +60,7 @@ app:
   name: UniPay
   support:
     email: anas.abbal10@gmail.com
+
+session:
+  expiration:
+    days: 7

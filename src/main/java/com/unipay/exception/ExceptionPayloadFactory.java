@@ -35,7 +35,8 @@ public enum ExceptionPayloadFactory {
     INVALID_TOKEN(17,HttpStatus.UNAUTHORIZED, "invalid.or.malformed.token"),
     BUSINESS_NOT_FOUND(18,HttpStatus.NOT_FOUND, "business.not.found"),
     BUSINESS_FOR_USER_NOT_FOUND(19,HttpStatus.NOT_FOUND, "business.for.user.not.found"),
-    USER_PROFILE_NOT_FOUND(20, HttpStatus.NOT_FOUND, "user.profile.not.found");
+    USER_PROFILE_NOT_FOUND(20, HttpStatus.NOT_FOUND, "user.profile.not.found"),
+    USER_NOT_AUTHENTICATED(21, HttpStatus.BAD_REQUEST, "user.not.authenticated");
 
     private final Integer code;
     private final HttpStatus status;

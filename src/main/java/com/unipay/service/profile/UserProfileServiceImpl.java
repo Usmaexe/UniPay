@@ -10,7 +10,6 @@ import com.unipay.models.UserProfile;
 import com.unipay.repository.AddressRepository;
 import com.unipay.repository.UserProfileRepository;
 import com.unipay.service.authentication.AuthenticationService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;

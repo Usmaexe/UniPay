@@ -1,7 +1,6 @@
 package com.unipay.models;
 
 
-import com.unipay.service.session.UserSessionService;
 import jakarta.persistence.*;
 import lombok.*;
 
