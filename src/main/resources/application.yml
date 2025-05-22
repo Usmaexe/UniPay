@@ -27,7 +27,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update  # ⚠️ Change to 'update' or 'none' in production
+      ddl-auto: create-drop  # ⚠️ Change to 'update' or 'none' in production
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -43,9 +43,7 @@ server:
 # JWT Configuration
 jwt:
   secret: QkZDa0Z3S3dZalZ3YnhNU2h4T2dUYUJ3U2NhVGxLQ3RtU1h3QmFsRVRPbXlXR1pU
-  access-token-expiration: 900000    # 15 minutes
-  refresh-token-expiration: 604800000 # 7 days
-  mfa-challenge-expiration: 300000
+  expiration-ms: 86400000 # 24 hours
 
 # Custom application settings
 application:

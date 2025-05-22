@@ -19,10 +19,10 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private final UserRepository userRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        log.info("Attempting to load user by email: {}", email);
-        User user = userRepository.findByEmailWithRolesAndPermissions(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
-        return new UserDetailsImpl(user);
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        log.info("Attempting to load user by username: {}", username);
+        User user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+        return UserDetailsImpl.create(user);
     }
 }

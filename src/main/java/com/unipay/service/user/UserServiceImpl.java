@@ -8,7 +8,6 @@ import com.unipay.enums.UserStatus;
 import com.unipay.exception.BusinessException;
 import com.unipay.exception.ExceptionPayloadFactory;
 import com.unipay.helper.UserRegistrationHelper;
-import com.unipay.models.ConfirmationToken;
 import com.unipay.models.MFASettings;
 import com.unipay.models.User;
 import com.unipay.repository.ConfirmationTokenRepository;
@@ -17,7 +16,6 @@ import com.unipay.service.audit_log.AuditLogService;
 import com.unipay.service.mail.EmailService;
 import com.unipay.service.role.RoleService;
 import com.unipay.service.session.UserSessionService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -65,12 +63,11 @@ public class UserServiceImpl implements UserService {
      * Also assigns the USER role and initiates email verification.
      *
      * @param command The registration command with username, password, email, and profile data.
-     * @param request HTTP request used for logging the origin IP and user-agent.
      * @return The newly created {@link User} with associated entities.
      */
     @Override
     @Transactional
-    public User create(UserRegisterCommand command, HttpServletRequest request) {
+    public User create(UserRegisterCommand command) {
         log.debug("Registering user: {}", command.getUsername());
         validateUserDoesNotExist(command);
 
@@ -122,34 +119,6 @@ public class UserServiceImpl implements UserService {
         mfaSettings.setUser(user);
         user.setMfaSettings(mfaSettings);
     }
-
-    /**
-     * Retrieves a user entity by its unique identifier.
-     *
-     * @param userId The user ID.
-     * @return The {@link User} found or throws if not found.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public User getUserById(String userId) {
-        log.debug("Fetching user with ID {}", userId);
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get()));
-    }
-
-    /**
-     * Retrieves a user and eagerly loads their roles and permissions.
-     *
-     * @param email The user's email address.
-     * @return The {@link User} with roles and permissions.
-     */
-    @Override
-    public User findByEmailWithRolesAndPermissions(String email) {
-        log.info("Fetching user by email: {}", email);
-        return userRepository.findByEmailWithRolesAndPermissions(email)
-                .orElseThrow(() -> new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get()));
-    }
-
     /**
      * Retrieves a paginated list of users based on filtering criteria.
      *
@@ -169,82 +138,38 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ExceptionPayloadFactory.TECHNICAL_ERROR.get(), e);
         }
     }
-
-    /**
-     * Retrieves a user by ID and includes their roles.
-     *
-     * @param userId The ID of the user.
-     * @return The {@link User} with roles initialized.
-     */
     @Override
-    @Transactional(readOnly = true)
-    public User getUserByIdWithRoles(String userId) {
-        return userRepository.findByIdWithRoles(userId)
-                .orElseThrow(() -> new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get()));
-    }
-
-    /**
-     * Initiates the "forgot password" workflow:
-     *  1. Finds the user by email.
-     *  2. Generates and saves a new confirmation token.
-     *  3. Sends a password reset email containing that token.
-     *
-     * @param email the email address to send the reset link to
-     * @throws BusinessException if the user is not found or email sending fails
-     */
-    @Transactional
-    public void forgotPassword(String email) {
-        log.info("Initiating forgot-password workflow for [{}]", email);
-        try {
-            User user = findByEmail(email);
-
-            ConfirmationToken token = ConfirmationToken.create(user);
-            confirmationTokenRepository.save(token);
-            log.debug("Generated ConfirmationToken [{}] for user [{}]", token.getConfirmationToken(), email);
-
-            emailService.sendPasswordResetEmail(user, token.getConfirmationToken());
-            log.info("Password reset email dispatched to [{}]", email);
-
-        } catch (BusinessException be) {
-            throw be;
-        } catch (Exception ex) {
-            log.error("Error in forgotPassword for [{}]", email, ex);
-            throw new BusinessException(ExceptionPayloadFactory.TECHNICAL_ERROR.get(), ex);
+    public Optional<User> findByEmail(String email) {
+        log.debug("Searching for user by email: {}", email);
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (optionalUser.isEmpty()) {
+            log.warn("User not found with email: {}", email);
         }
+        return optionalUser;
     }
+
     @Override
-    public User findByEmail(String email){
+    public User findByEmailWithNoOptional(String email) {
         return userRepository.findByEmail(email).orElseThrow(
                 () -> new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get())
         );
     }
 
     @Override
-    public Optional<User> findByEmailWithOptional(String email) {
-        return userRepository.findByEmail(email);
-    }
-    @Override
-    @Transactional
-    public void changePassword(User user, String newPassword) {
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        userSessionService.revokeAllSessions(user);
-        auditLogService.createAuditLog(
-                user,
-                AuditLogAction.PASSWORD_CHANGED.getAction(),
-                "Password changed - sessions revoked"
-        );
-    }
+    public User findByUsername(String username){
+        log.debug("Entering findByUsername() with username: {}", username);
 
-    @Override
-    @Transactional
-    public void desactivateUser(String userId) {
-        User user = getUserById(userId);
-        user.setStatus(UserStatus.INACTIVE);
-        userSessionService.revokeAllSessions(user);
-        auditLogService.createAuditLog(
-                user,
-                AuditLogAction.ACCOUNT_LOCKED.getAction(),
-                "Account deactivated - sessions revoked"
-        );
+        Optional<User> optionalUser = userRepository.findByUsername(username);
+        log.debug("Result from userRepository.findByUsername(): {}", optionalUser);
+
+        if (optionalUser.isEmpty()) {
+            log.warn("User not found with username: {}", username);
+            throw new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get());
+        }
+
+        User user = optionalUser.get();
+        log.debug("Retrieved User: {}", user);
+        log.debug("Exiting findByUsername() with user: {}", user);
+        return user;
     }
 }

@@ -15,7 +15,7 @@ import static com.unipay.constants.Constants.EXPIRATION_MINUTES;
 @Getter
 @Setter
 @Entity
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor()
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class ConfirmationToken {
 

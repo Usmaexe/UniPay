@@ -97,5 +97,39 @@ public class EmailContentBuilder {
 
         return emailContent.toString();
     }
+    public String buildNewDeviceLoginEmail(String username, String deviceId, String ipAddress, String userAgent) {
+        StringBuilder emailContent = new StringBuilder();
+        emailContent.append("<!DOCTYPE html>")
+                .append("<html lang=\"en\">")
+                .append("<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
+                .append("<title>New Device Login</title></head>")
+                .append("<body style=\"margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;\">")
+                .append("<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\">")
+                .append("<tr><td align=\"center\" style=\"padding: 40px 0;\">")
+                .append("<table width=\"600\" style=\"border: 1px solid #eaeaea; border-radius: 8px; padding: 40px;\">")
+                .append("<tr><td align=\"center\">")
+                .append("<img src=\"https://yourdomain.com/logo.png\" alt=\"YourApp Logo\" width=\"120\" style=\"margin-bottom: 24px;\">")
+                .append("<h1 style=\"color: #1a1a1a; margin: 0 0 24px 0;\">New Device Login Detected</h1>")
+                .append("</td></tr>")
+                .append("<tr><td style=\"padding: 24px 0; border-top: 1px solid #eaeaea;\">")
+                .append("<p style=\"color: #666666; margin: 0 0 24px 0; line-height: 1.6;\">")
+                .append("Hi ").append(username).append(",<br><br>")
+                .append("We noticed a login to your account from a new device. If this was you, no action is needed. Otherwise, please secure your account.")
+                .append("</p>")
+                .append("<ul style=\"color: #666666; line-height: 1.6;\">")
+                .append("<li><strong>Device ID:</strong> ").append(deviceId).append("</li>")
+                .append("<li><strong>IP Address:</strong> ").append(ipAddress).append("</li>")
+                .append("<li><strong>User-Agent:</strong> ").append(userAgent).append("</li>")
+                .append("</ul>")
+                .append("</td></tr>")
+                .append("<tr><td style=\"padding-top: 24px; border-top: 1px solid #eaeaea;\">")
+                .append("<p style=\"color: #999999; font-size: 12px; line-height: 1.6; margin: 0;\">")
+                .append("Need help? Contact our support team at <a href=\"mailto:support@yourdomain.com\" style=\"color: #4299e1; text-decoration: none;\">support@yourdomain.com</a><br>")
+                .append("© ").append(LocalDate.now().getYear()).append(" YourApp. All rights reserved.")
+                .append("</p>")
+                .append("</td></tr>")
+                .append("</table></td></tr></table></body></html>");
+        return emailContent.toString();
+    }
 
 }

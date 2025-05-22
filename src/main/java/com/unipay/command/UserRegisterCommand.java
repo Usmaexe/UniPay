@@ -1,6 +1,7 @@
 package com.unipay.command;
 
 import com.unipay.utils.AssertValidation;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
@@ -34,6 +35,7 @@ import lombok.Getter;
  * @see UserSettingsCommand
  */
 @Getter
+@AllArgsConstructor
 public class UserRegisterCommand {
 
     /**
