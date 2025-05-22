@@ -45,4 +45,8 @@ public class UserSession extends BaseEntity{
     public boolean isValid() {
         return !revoked && expiresAt.isAfter(Instant.now());
     }
+
+    public boolean isExpired() {
+        return expiresAt.isBefore(Instant.now());
+    }
 }

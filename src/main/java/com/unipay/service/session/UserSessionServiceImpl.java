@@ -3,15 +3,14 @@ package com.unipay.service.session;
 import com.unipay.models.User;
 import com.unipay.models.UserSession;
 import com.unipay.repository.UserSessionRepository;
-import com.unipay.utils.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 
@@ -24,92 +23,121 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UserSessionServiceImpl implements UserSessionService {
 
-    private final JwtService jwtService;
-    private final UserSessionRepository sessionRepository;
+    private static final Duration SESSION_REFRESH_THRESHOLD = Duration.ofMinutes(15);
 
-    @Value("${session.expiration.days:7}")
-    private int sessionExpirationDays;
+    private final UserSessionRepository userSessionRepository;
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     @Transactional
-    public UserSession createSession(User user, String deviceId, String userAgent, String ipAddress) {
-        Instant now = Instant.now();
-        Optional<UserSession> existing = sessionRepository
-                .findFirstByUserIdAndDeviceIdAndRevokedFalseAndExpiresAtAfter(
-                        user.getId(), deviceId, now);
+    public UserSession createSession(User user, String deviceId, String ipAddress, String userAgent, Instant expiresAt) {
+        revokeExpiredSessions(user);
 
-        if (existing.isPresent()) {
-            UserSession session = existing.get();
-            session.setExpiresAt(now.plus(sessionExpirationDays, ChronoUnit.DAYS));
-            UserSession updated = sessionRepository.save(session);
-            log.info("Extended session [{}] for user [{}]", updated.getId(), user.getId());
-            return updated;
-        }
+        UserSession session = UserSession.create(
+                user,
+                deviceId,
+                ipAddress,
+                userAgent
+        );
+        session.setExpiresAt(expiresAt);
 
-        UserSession session = buildUserSession(user, deviceId, userAgent, ipAddress);
-        UserSession saved = sessionRepository.save(session);
-        log.info("Created new session [{}] for user [{}]", saved.getId(), user.getId());
-        return saved;
+        return userSessionRepository.save(session);
     }
 
-    private UserSession buildUserSession(User user, String deviceId, String userAgent, String ipAddress) {
-        return UserSession.builder()
-                .user(user)
-                .deviceId(deviceId)
-                .userAgent(userAgent)
-                .ipAddress(ipAddress)
-                .expiresAt(Instant.now().plus(sessionExpirationDays, ChronoUnit.DAYS))
-                .revoked(false)
-                .build();
+    @Transactional(readOnly = true)
+    public List<UserSession> getActiveSessions(User user) {
+        return userSessionRepository.findByUserAndRevokedFalseAndExpiresAtAfter(
+                user,
+                Instant.now()
+        );
     }
-
     /**
-     * {@inheritDoc}
+     * Validates a session by ID. If still valid, extends its expiration (optional).
+     * @param sessionId the UUID or DB‐assigned ID of the session
+     * @return the up‐to‐date UserSession, or null if invalid/expired/revoked
      */
-    @Override
+    @Transactional
+    public UserSession validateAndRefreshSession(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) return null;
+
+        return userSessionRepository.findById(sessionId)
+                .map(session -> {
+                    if (!validateSession(session)) {
+                        log.warn("Invalid session: {}", sessionId);
+                        return null;
+                    }
+
+                    if (shouldRefreshSession(session)) {
+                        session.setExpiresAt(Instant.now().plusMillis(800000));
+                        userSessionRepository.save(session);
+                        log.debug("Refreshed session expiration: {}", sessionId);
+                    }
+
+                    return session;
+                })
+                .orElse(null);
+    }
+
+    private boolean shouldRefreshSession(UserSession session) {
+        Duration remaining = Duration.between(Instant.now(), session.getExpiresAt());
+        return remaining.compareTo(SESSION_REFRESH_THRESHOLD) < 0;
+    }
+
     @Transactional
     public void revokeSession(String sessionId) {
-        sessionRepository.findById(sessionId).ifPresent(session -> {
-            session.setRevoked(true);
-            jwtService.blacklistToken(sessionId);
-            log.info("Revoked session [{}]", sessionId);
-        });
+        userSessionRepository.findById(sessionId)
+                .ifPresent(session -> {
+                    session.setRevoked(true);
+                    userSessionRepository.save(session);
+                    log.info("Revoked session: {}", sessionId);
+                });
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public boolean isSessionValid(String sessionId) {
-        return sessionRepository.isValidSession(sessionId, Instant.now());
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Transactional
-    public void invalidateSession(String sessionId) {
-        sessionRepository.findById(sessionId).ifPresent(session -> {
-            session.setRevoked(true);
-            sessionRepository.save(session);
-            jwtService.blacklistToken(sessionId);
-            log.info("Invalidated session [{}] and blacklisted token", sessionId);
-        });
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     @Transactional
     public void revokeAllSessions(User user) {
-        int revokedCount = sessionRepository.bulkRevokeUserSessions(user.getId(), Instant.now());
-        jwtService.bulkBlacklistTokens(user.getId());
-        log.info("Revoked {} sessions for user [{}]", revokedCount, user.getId());
+        userSessionRepository.revokeAllActiveSessions(
+                user.getId(),
+                Instant.now()
+        );
+        log.info("Revoked all sessions for user: {}", user.getEmail());
+    }
+
+    @Transactional
+    public void revokeOtherSessions(User currentUser, String currentSessionId) {
+        userSessionRepository.revokeOtherSessions(
+                currentUser.getId(),
+                currentSessionId,
+                Instant.now()
+        );
+        log.info("Revoked other sessions for user: {}", currentUser.getEmail());
+    }
+
+    @Transactional
+    public void revokeExpiredSessions(User user) {
+        userSessionRepository.revokeExpiredSessions(
+                user.getId(),
+                Instant.now()
+        );
+    }
+    /**
+     * Returns true if there is already a non-revoked, unexpired session
+     * for this user+deviceId.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasActiveSessionForDevice(User user, String deviceId) {
+        return userSessionRepository.existsByUserAndDeviceIdAndRevokedFalseAndExpiresAtAfter(
+                user, deviceId, Instant.now()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public Optional<UserSession> findActiveByUserAndDevice(User user, String deviceId, Instant now) {
+        return userSessionRepository
+                .findFirstByUserAndDeviceIdAndRevokedFalseAndExpiresAtAfter(user, deviceId, now);
+    }
+
+    public boolean validateSession(UserSession session) {
+        return session != null &&
+                !session.isRevoked() &&
+                session.getExpiresAt().isAfter(Instant.now());
     }
 }

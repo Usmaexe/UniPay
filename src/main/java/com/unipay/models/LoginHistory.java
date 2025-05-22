@@ -85,4 +85,44 @@ public class LoginHistory extends BaseEntity {
 
         return loginHistory;
     }
+    /**
+     * Factory for a successful login history entry.
+     *
+     * @param user        the user who logged in
+     * @param timestamp   when the login occurred
+     * @param ipAddress   source IP of the login
+     * @param userAgent   client user-agent string
+     * @return a new LoginHistory marked successful
+     */
+    public static LoginHistory createSuccess(
+            User user,
+            LocalDateTime timestamp,
+            String ipAddress,
+            String userAgent
+    ) {
+        LoginHistory loginHistory = new LoginHistory();
+        loginHistory.user = user;
+        loginHistory.loginTimestamp = timestamp;
+        loginHistory.ipAddress = ipAddress;
+        loginHistory.userAgent = userAgent;
+        loginHistory.successful = true;
+        return loginHistory;
+    }
+    public static LoginHistory createFailure(
+            User user,
+            LocalDateTime timestamp,
+            String ipAddress,
+            String userAgent,
+            String failureReason
+    ) {
+        LoginHistory loginHistory = new LoginHistory();
+        loginHistory.user = user;
+        loginHistory.loginTimestamp = timestamp;
+        loginHistory.ipAddress = ipAddress;
+        loginHistory.userAgent = userAgent;
+        loginHistory.successful = false;
+        return loginHistory;
+    }
+
+
 }

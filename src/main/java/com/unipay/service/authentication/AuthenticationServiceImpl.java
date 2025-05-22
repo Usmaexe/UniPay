@@ -3,205 +3,131 @@ package com.unipay.service.authentication;
 import com.unipay.annotation.Auditable;
 import com.unipay.command.LoginCommand;
 import com.unipay.command.UserRegisterCommand;
-import com.unipay.enums.AuditLogAction;
 import com.unipay.enums.UserStatus;
-import com.unipay.exception.BusinessException;
-import com.unipay.exception.ExceptionPayloadFactory;
+import com.unipay.exception.AuthException;
+import com.unipay.models.LoginHistory;
 import com.unipay.models.User;
 import com.unipay.models.UserSession;
 import com.unipay.payload.UserDetailsImpl;
 import com.unipay.response.LoginResponse;
-import com.unipay.security.UserDetailsServiceImpl;
-import com.unipay.service.audit_log.AuditLogService;
-import com.unipay.service.login_histroy.LoginHistoryService;
-import com.unipay.service.mfa.MFAService;
+import com.unipay.service.mail.EmailService;
 import com.unipay.service.session.UserSessionService;
 import com.unipay.service.user.UserService;
 import com.unipay.utils.JwtService;
-import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.constraints.Email;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.stream.Collectors;
+import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthenticationServiceImpl implements AuthenticationService {
 
+    private final EmailService emailService;
     private final JwtService jwtService;
-    private final MFAService mfaService;
     private final UserService userService;
-    private final AuditLogService auditLogService;
     private final UserSessionService userSessionService;
-    private final LoginHistoryService loginHistoryService;
     private final AuthenticationManager authenticationManager;
-    private final UserDetailsServiceImpl userDetailsService;
+
+
 
     @Override
     @Auditable(action = "USER_REGISTRATION")
-    public void register(UserRegisterCommand command, HttpServletRequest request) {
-        userService.create(command, request);
+    public void register(UserRegisterCommand command) {
+        userService.create(command);
     }
-
     @Override
     @Transactional
     @Auditable(action = "USER_LOGIN")
     public LoginResponse login(LoginCommand command, HttpServletRequest request) {
-        try {
-            Authentication authentication = authenticateUser(command);
-            User user = getAuthenticatedUser(authentication);
-            validateUserIsActive(user);
-
-            if (isMfaEnabled(user)) {
-                String challengeToken = generateMfaChallengeToken(authentication);
-                return LoginResponse.mfaRequired(challengeToken);
-            }
-            userSessionService.revokeAllSessions(user);
-            UserSession session = createUserSession(user, request);
-            logLoginSuccess(user, request);
-            return buildLoginResponse(authentication, session);
-
-        } catch (AuthenticationException e) {
-            return handleLoginException(command.getEmail(), request, e);
-        }
-    }
-
-    @Override
-    @Transactional
-    @Auditable(action = "PASSWORD_RESET_REQUEST")
-    public void forgotPassword(String email, HttpServletRequest request) {
-        log.info("Forgot password requested for [{}]", email);
-        userService.forgotPassword(email);
-        auditLogService.createAuditLog(
-                userService.findByEmailWithRolesAndPermissions(email),
-                AuditLogAction.PASSWORD_RESET_REQUEST.getAction(),
-                "Password reset requested"
-        );
-    }
-
-    @Override
-    @Transactional
-    @Auditable(action = "MFA_VERIFICATION")
-    public LoginResponse verifyMfa(String challengeToken, String code, HttpServletRequest request) {
-        validateChallengeToken(challengeToken);
-
-        String email = jwtService.extractUsername(challengeToken);
-        User user = userService.findByEmail(email);
-
-        if (!mfaService.validateCode(user, code)) {
-            return handleLoginException(email, request, new BadCredentialsException("Invalid MFA code"));
-        }
-
-        UserSession session = createUserSession(user, request);
-        logLoginSuccess(user, request);
-
-        UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
-        userDetails.setMfaVerified(true);
-
-        return buildLoginResponse(userDetails, session);
-    }
-
-    @Override
-    @Transactional
-    @Auditable(action = "TOKEN_REFRESH")
-    public LoginResponse refreshToken(String refreshToken, HttpServletRequest request) {
-        try {
-            validateRefreshToken(refreshToken);
-            String sessionId = jwtService.extractSessionId(refreshToken);
-            String email = jwtService.extractUsername(refreshToken);
-
-            validateSession(sessionId);
-
-            UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(email);
-            return buildTokenResponse(userDetails, sessionId);
-
-        } catch (JwtException | UsernameNotFoundException e) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_TOKEN.get());
-        }
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String email = authentication == null ? null : authentication.getName();
-        if (email == null) {
-            throw new BusinessException(ExceptionPayloadFactory.USER_NOT_AUTHENTICATED.get());
-        }
-        return userService.findByEmail(email);
-    }
-
-
-    @Override
-    @Transactional
-    @Auditable(action = "USER_LOGOUT")
-    public void logout(HttpServletRequest request) {
-        String token = extractTokenFromRequest(request);
-        String sessionId = jwtService.extractSessionId(token);
-        userSessionService.invalidateSession(sessionId);
-
-        User user = getCurrentUser();
-        auditLogService.createAuditLog(user, AuditLogAction.LOGOUT.getAction(), "User logged out");
-    }
-
-    // ===== Helper Methods =====
-
-    private Authentication authenticateUser(LoginCommand command) {
-        return authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(command.getEmail(), command.getPassword()));
-    }
-
-    private User getAuthenticatedUser(Authentication authentication) {
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        return userService.findByEmail(userDetails.getUsername());
-    }
-
-    private void validateUserIsActive(User user) {
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new DisabledException("User account is not active");
-        }
-    }
-
-    private boolean isMfaEnabled(User user) {
-        return user.getMfaSettings() != null && user.getMfaSettings().isEnabled();
-    }
-
-    private String generateMfaChallengeToken(Authentication authentication) {
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        return jwtService.generateMfaChallengeToken(userDetails);
-    }
-
-    private UserSession createUserSession(User user, HttpServletRequest request) {
-        String deviceId = getDeviceName();
+        String email = command.getEmail();
+        String password = command.getPassword();
         String userAgent = request.getHeader("User-Agent");
-        String ipAddress = getClientIp(request);
+        String clientIp = getClientIp(request);
+        String deviceId = getDeviceName();
 
-        return userSessionService.createSession(user, deviceId, userAgent, ipAddress);
+        log.debug("Attempting login for email: {}", email);
+
+        User user = retrieveUser(email);
+        validateUserStatus(user, clientIp, userAgent);
+
+        Authentication authentication = authenticateUser(email, password);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        UserSession session = manageSession(user, deviceId, clientIp, userAgent, request);
+        String jwt = jwtService.generateJwtToken(authentication, session.getId());
+
+        recordLoginSuccess(user, clientIp, userAgent);
+
+        UserDetailsImpl principal = (UserDetailsImpl) authentication.getPrincipal();
+        return new LoginResponse(jwt, principal.getUsername(), principal.getAuthorities());
+    }
+    @Transactional(readOnly = true)
+    @Override
+    public User getCurrentUser() {
+        UserDetailsImpl principal = getCurrentUserPrincipal();
+        return userService.findByEmailWithNoOptional(principal.getUsername());
+    }
+    @Override
+    public String getCurrentEmail() {
+        return getCurrentUserPrincipal().getUsername();
+    }
+    private UserDetailsImpl getCurrentUserPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new SecurityException("No authenticated user found");
+        }
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof UserDetailsImpl)) {
+            throw new SecurityException("Invalid authentication principal type. Found: " +
+                    principal.getClass().getName());
+        }
+        return (UserDetailsImpl) principal;
+    }
+    private Authentication authenticateUser(String email, String password) {
+        try {
+            return authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(email, password));
+        } catch (BadCredentialsException ex) {
+            log.warn("Invalid login attempt for email: {}", email);
+            throw new AuthException("Invalid email or password", HttpStatus.UNAUTHORIZED);
+        }
     }
 
+    private UserSession manageSession(User user, String deviceId, String clientIp, String userAgent, HttpServletRequest request) {
+        boolean isNewDevice = !userSessionService.hasActiveSessionForDevice(user, deviceId);
+        if (isNewDevice) {
+            UserSession session = userSessionService.createSession(user, deviceId, clientIp, userAgent, Instant.now().plusMillis(jwtService.getExpirationMs()));
+            emailService.sendNewLoginDetected(user.getEmail(), user.getUsername(), deviceId, request);
+            return session;
+        } else {
+            return userSessionService.findActiveByUserAndDevice(user, deviceId, Instant.now())
+                    .orElseThrow(() -> new IllegalStateException("Expected existing session"));
+        }
+    }
+    private void recordLoginSuccess(User user, String clientIp, String userAgent) {
+        user.addLoginHistory(LoginHistory.createSuccess(user, LocalDateTime.now(), clientIp, userAgent));
+    }
 
     private String getDeviceName() {
         try {
             InetAddress localHost = InetAddress.getLocalHost();
             return localHost.getHostName();
         } catch (UnknownHostException e) {
-            System.err.println("Unable to determine device name.");
-            e.printStackTrace();
+            log.error("Unable to determine device name.", e);
             return "unknown-device";
         }
     }
@@ -210,78 +136,24 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             InetAddress localHost = InetAddress.getLocalHost();
             return localHost.getHostAddress();
-        }catch (UnknownHostException e) {
-            System.err.println("Unable to determine IP address.");
-            e.printStackTrace();
+        } catch (UnknownHostException e) {
+            log.error("Unable to determine IP address.", e);
             return "unknown-ipAddress";
         }
     }
-
-
-    private LoginResponse buildLoginResponse(UserDetailsImpl userDetails, UserSession session) {
-        return LoginResponse.success(
-                jwtService.generateTokenPair(userDetails, session.getId()),
-                userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList())
-        );
+    private User retrieveUser(String email) {
+        return userService.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn("Login attempt for non-existent email: {}", email);
+                    throw new BadCredentialsException("Invalid credentials");
+                });
     }
 
-    private LoginResponse buildLoginResponse(Authentication authentication, UserSession session) {
-        return buildLoginResponse((UserDetailsImpl) authentication.getPrincipal(), session);
-    }
-
-    private LoginResponse buildTokenResponse(UserDetailsImpl userDetails, String sessionId) {
-        return LoginResponse.success(
-                jwtService.generateTokenPair(userDetails, sessionId),
-                userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList())
-        );
-    }
-
-    private void validateChallengeToken(String token) {
-        if (!jwtService.isMfaChallengeToken(token)) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_MFA_CHALLENGE.get());
+    private void validateUserStatus(User user, String clientIp, String userAgent) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            log.warn("Login attempt for disabled account. Email: {}, Status: {}", user.getEmail(), user.getStatus());
+            user.addLoginHistory(LoginHistory.createFailure(user, LocalDateTime.now(), clientIp, userAgent, "ACCOUNT_DISABLED"));
+            throw new AuthException("Account is not active", HttpStatus.UNAUTHORIZED);
         }
-    }
-
-    private void validateRefreshToken(String token) {
-        if (!jwtService.isRefreshToken(token)) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_TOKEN.get());
-        }
-    }
-
-    private void validateSession(String sessionId) {
-        if (!userSessionService.isSessionValid(sessionId)) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_SESSION.get());
-        }
-    }
-
-    private LoginResponse handleLoginException(String email, HttpServletRequest request, AuthenticationException e) {
-        ExceptionPayloadFactory payload;
-
-        if (e instanceof DisabledException) {
-            payload = ExceptionPayloadFactory.USER_NOT_ACTIVE;
-        } else if (e instanceof BadCredentialsException) {
-            payload = ExceptionPayloadFactory.INVALID_PAYLOAD;
-        } else {
-            payload = ExceptionPayloadFactory.AUTHENTICATION_FAILED;
-        }
-
-        userService.findByEmailWithOptional(email).ifPresent(user -> {
-            loginHistoryService.createLoginHistory(user, request, false);
-            auditLogService.createAuditLog(user, AuditLogAction.LOGIN_FAILED.getAction(), "Failed login attempt: " + e.getMessage());
-        });
-
-        throw new BusinessException(payload.get());
-    }
-    private void logLoginSuccess(User user, HttpServletRequest request) {
-        loginHistoryService.createLoginHistory(user, request, true);
-        auditLogService.createAuditLog(user, AuditLogAction.LOGIN_SUCCESS.getAction(), "Successful login");
-    }
-
-    private String extractTokenFromRequest(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new BusinessException(ExceptionPayloadFactory.INVALID_TOKEN.get());
-        }
-        return authHeader.substring(7);
     }
 }

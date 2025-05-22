@@ -12,110 +12,97 @@ import com.unipay.response.EmailConfirmationResponse;
 import com.unipay.response.EmailConfirmationResponseFailed;
 import com.unipay.response.EmailConfirmationResponseSuccess;
 import com.unipay.utils.EmailContentBuilder;
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
-public class EmailServiceImp implements EmailService{
+@Slf4j
+public class EmailServiceImp implements EmailService {
 
     private final ConfirmationTokenRepository confirmationTokenRepository;
     private final EmailContentBuilder emailContentBuilder;
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
 
-
-    @Async
     @Override
     @Transactional
     public void sendConfirmationEmail(User user) {
-        try {
-            ConfirmationToken token = ConfirmationToken.create(user);
-            confirmationTokenRepository.save(token);
+        ConfirmationToken token = ConfirmationToken.create(user);
+        confirmationTokenRepository.save(token);
+        sendConfirmationEmailAsync(user, token);
+    }
 
+    @Async
+    public void sendConfirmationEmailAsync(User user, ConfirmationToken token) {
+        try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
             helper.setTo(user.getEmail());
             helper.setSubject("Confirm Your Account");
             helper.setText(emailContentBuilder.buildEmailContent(user, token), true);
-
             mailSender.send(message);
             log.info("Confirmation email sent to {}", user.getEmail());
         } catch (Exception e) {
             log.error("Failed to send confirmation email", e);
-            throw new BusinessException(ExceptionPayloadFactory.FAILED_TO_SEND_EMAIL.get());
         }
     }
-    /**
-     * Confirms a user's registration using a confirmation token.
-     * @param confirmationCode the token to validate and activate the user
-     */
+
     @Override
     @Transactional
     public EmailConfirmationResponse confirmRegistration(String confirmationCode) {
-        log.info("Verifying confirmation code...");
-
         ConfirmationToken token = getTokenByCode(confirmationCode);
-
         if (token == null || token.isExpired()) {
             return new EmailConfirmationResponseFailed(
                     "INVALID_TOKEN",
                     "Verification token is invalid or expired"
             );
         }
-
         User user = userRepository.findByEmail(token.getUser().getEmail())
                 .orElseThrow(() -> new BusinessException(ExceptionPayloadFactory.USER_NOT_FOUND.get()));
-
         user.setStatus(UserStatus.ACTIVE);
         userRepository.save(user);
-
-        log.info("Email {} verified and status set to ACTIVE.", user.getEmail());
-
         return new EmailConfirmationResponseSuccess(
                 "CONFIRMED",
                 "Email verified successfully"
         );
     }
 
-
     private ConfirmationToken getTokenByCode(String code) {
-        ConfirmationToken token = confirmationTokenRepository.findByConfirmationToken(code)
+        return confirmationTokenRepository.findByConfirmationToken(code)
                 .orElseThrow(() -> new BusinessException(ExceptionPayloadFactory.CONFIRMATION_TOKEN_NOT_FOUND.get()));
-
-        log.info("Confirmation token fetched");
-        return token;
     }
-    @Async
+
     @Override
-    @Transactional
-    public void sendPasswordResetEmail(User user, String tokenValue) {
+    public void sendNewLoginDetected(String toEmail, String username, String deviceId, HttpServletRequest request) {
+        String ipAddress = request.getRemoteAddr();
+        String userAgent = request.getHeader("User-Agent");
+        String subject = "New login from a new device";
+        String body = emailContentBuilder.buildNewDeviceLoginEmail(username, deviceId, ipAddress, userAgent);
+        sendEmailAsync(toEmail, subject, body);
+    }
+
+    @Async
+    public void sendEmailAsync(String toEmail, String subject, String body) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setTo(user.getEmail());
-            helper.setSubject("Reset Your Password");
-            helper.setText(
-                    emailContentBuilder.buildPasswordResetEmailContent(user, tokenValue),
-                    true
-            );
-
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(body, true);
             mailSender.send(message);
-            log.info("Password reset email sent to {}", user.getEmail());
-        } catch (Exception e) {
-            log.error("Failed to send password reset email", e);
-            throw new BusinessException(
-                    ExceptionPayloadFactory.FAILED_TO_SEND_EMAIL.get()
-            );
+        } catch (MessagingException e) {
+            log.error("Failed to send email to {}", toEmail, e);
         }
     }
 }
+

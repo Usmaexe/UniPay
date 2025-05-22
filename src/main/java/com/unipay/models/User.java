@@ -1,6 +1,8 @@
 package com.unipay.models;
 
 import com.unipay.command.UserRegisterCommand;
+import com.unipay.enums.PermissionName;
+import com.unipay.enums.RoleName;
 import com.unipay.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -184,5 +186,34 @@ public class User extends BaseEntity {
         }
         this.auditLogs.add(auditLog);
         auditLog.setUser(this);
+    }
+    /**
+     *** Checks if the user has a specific role
+    */
+    public boolean hasRole(RoleName roleName) {
+        return userRoles.stream()
+                .anyMatch(ur -> ur.getRole().getName() == roleName);
+    }
+
+    /**
+     * Checks if the user has a specific permission
+     */
+    public boolean hasPermission(PermissionName permissionName) {
+        return userRoles.stream()
+                .flatMap(ur -> ur.getRole().getPermissions().stream())
+                .anyMatch(p -> p.getName() == permissionName);
+    }
+
+    /**
+     * Safe toString() to prevent accidental lazy loading issues
+     */
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + getId() +
+                ", username='" + username + '\'' +
+                ", email='" + email + '\'' +
+                ", status=" + status +
+                '}';
     }
 }
